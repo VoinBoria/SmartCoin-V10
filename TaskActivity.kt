@@ -80,7 +80,7 @@ class TaskActivity : ComponentActivity() {
                     if (viewModel.hasOverdueTasks()) { // Перевірка прострочених задач
                         delay(500) // Затримка перед показом повідомлення
                         showOverdueMessage = true
-                        delay(3000) // Затримка на 3 секунди
+                        delay(5000) // Затримка на 3 секунди
                         showOverdueMessage = false
                     }
                 }
