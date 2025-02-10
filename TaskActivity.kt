@@ -241,12 +241,16 @@ class TaskViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskScreen(viewModel: TaskViewModel) {
     val context = LocalContext.current
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<Task?>(null) } // Add this state for editing task
     var showSaveMessage by remember { mutableStateOf(false) }
+    var showReminderMessage by remember { mutableStateOf(false) }
+    var reminderTaskTitle by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         floatingActionButton = {
@@ -294,9 +298,45 @@ fun TaskScreen(viewModel: TaskViewModel) {
                             } else {
                                 viewModel.addTask(task)
                             }
+
                             showAddTaskDialog = false
                             editingTask = null
                             showSaveMessage = true
+
+                            // Schedule reminder based on the selected option
+                            val reminderDelay = when (task.reminder) {
+                                "За 10 хвилин" -> 10 * 60 * 1000L
+                                "За пів години" -> 30 * 60 * 1000L
+                                "За годину" -> 60 * 60 * 1000L
+                                "За день" -> 24 * 60 * 60 * 1000L
+                                "За тиждень" -> 7 * 24 * 60 * 60 * 1000L
+                                else -> 0L
+                            }
+
+                            val currentTime = System.currentTimeMillis()
+                            val taskStartTime = task.startDate.time
+                            val delayTime = taskStartTime - reminderDelay - currentTime
+
+                            if (delayTime > 0) {
+                                coroutineScope.launch {
+                                    delay(delayTime)
+                                    reminderTaskTitle = task.title
+                                    showReminderMessage = true
+                                    delay(3000) // Show reminder message for 3 seconds
+                                    showReminderMessage = false
+                                }
+                            }
+
+                            // Show reminder when task starts
+                            if (taskStartTime > currentTime) {
+                                coroutineScope.launch {
+                                    delay(taskStartTime - currentTime)
+                                    reminderTaskTitle = task.title
+                                    showReminderMessage = true
+                                    delay(3000) // Show reminder message for 3 seconds
+                                    showReminderMessage = false
+                                }
+                            }
                         }
                     )
                 }
@@ -327,6 +367,31 @@ fun TaskScreen(viewModel: TaskViewModel) {
                                 .padding(16.dp)
                         ) {
                             Text("Задача збережена", color = Color.White)
+                        }
+                    }
+                }
+
+                if (showReminderMessage) {
+                    AnimatedVisibility(
+                        visible = showReminderMessage,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(animationSpec = tween(500)),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(500)),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 100.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        listOf(Color(0xFFFFFF00).copy(alpha = 0.8f), Color.Transparent)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Text("Нагадування по задачі \"$reminderTaskTitle\"", color = Color.Black)
                         }
                     }
                 }
