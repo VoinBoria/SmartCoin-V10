@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -240,12 +241,12 @@ class TaskViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskScreen(viewModel: TaskViewModel) {
     val context = LocalContext.current
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<Task?>(null) } // Add this state for editing task
+    var showSaveMessage by remember { mutableStateOf(false) }
 
     Scaffold(
         floatingActionButton = {
@@ -295,9 +296,39 @@ fun TaskScreen(viewModel: TaskViewModel) {
                             }
                             showAddTaskDialog = false
                             editingTask = null
-                            Toast.makeText(context, "Задача збережена", Toast.LENGTH_SHORT).show()
+                            showSaveMessage = true
                         }
                     )
+                }
+
+                if (showSaveMessage) {
+                    LaunchedEffect(Unit) {
+                        delay(3000) // Затримка на 3 секунди
+                        showSaveMessage = false
+                    }
+
+                    AnimatedVisibility(
+                        visible = showSaveMessage,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(animationSpec = tween(500)),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(animationSpec = tween(500)),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 100.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        listOf(Color(0xFF004d00).copy(alpha = 0.8f), Color.Transparent)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Text("Задача збережена", color = Color.White)
+                        }
+                    }
                 }
             }
         }
