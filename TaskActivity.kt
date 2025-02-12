@@ -323,10 +323,10 @@ fun TaskScreen(viewModel: TaskViewModel) {
                             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
                             // Schedule reminder for task start time
-                            scheduleReminder(alarmManager, context, task.startDate.time, task.title, "START")
+                            scheduleReminder(alarmManager, context, task.startDate.time, task.title, "START", task.id.hashCode())
 
                             // Schedule reminder for task end time
-                            scheduleReminder(alarmManager, context, task.endDate.time, task.title, "END")
+                            scheduleReminder(alarmManager, context, task.endDate.time, task.title, "END", task.id.hashCode() + 1)
                         }
                     )
                 }
@@ -397,12 +397,12 @@ fun TaskScreen(viewModel: TaskViewModel) {
 
 @RequiresApi(Build.VERSION_CODES.S)
 @SuppressLint("ScheduleExactAlarm")
-fun scheduleReminder(alarmManager: AlarmManager, context: Context, triggerAtMillis: Long, taskTitle: String, action: String) {
+fun scheduleReminder(alarmManager: AlarmManager, context: Context, triggerAtMillis: Long, taskTitle: String, action: String, requestCode: Int) {
     val intent = Intent(context, ReminderBroadcastReceiver::class.java).apply {
         putExtra("TASK_TITLE", taskTitle)
         putExtra("ACTION", action)
     }
-    val pendingIntent = PendingIntent.getBroadcast(context, action.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE)
+    val pendingIntent = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
 }
 
