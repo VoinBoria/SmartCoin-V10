@@ -1,15 +1,26 @@
-package com.serhio.homeaccountingapp;
+package com.serhio.homeaccountingapp
 
+import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.DatePickerDialog
+import android.app.PendingIntent
 import android.app.TimePickerDialog
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.provider.Settings
+import android.view.LayoutInflater
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -46,10 +57,12 @@ import androidx.lifecycle.ViewModelProvider
 import com.serhio.homeaccountingapp.ui.theme.HomeAccountingAppTheme
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
+
 
 class TaskActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
@@ -60,6 +73,7 @@ class TaskActivity : ComponentActivity() {
         startActivity(intent)
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,7 +94,7 @@ class TaskActivity : ComponentActivity() {
                     if (viewModel.hasOverdueTasks()) { // Перевірка прострочених задач
                         delay(500) // Затримка перед показом повідомлення
                         showOverdueMessage = true
-                        delay(5000) // Затримка на 3 секунди
+                        delay(5000) // Затримка на 5 секунд
                         showOverdueMessage = false
                     }
                 }
@@ -161,7 +175,11 @@ class TaskActivity : ComponentActivity() {
         }
     }
 
+    val requestExactAlarmPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // Handle the result if needed
+    }
 }
+
 data class Task(
     val id: String,
     val title: String,
@@ -241,24 +259,24 @@ class TaskViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+
+@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskScreen(viewModel: TaskViewModel) {
     val context = LocalContext.current
     var showAddTaskDialog by remember { mutableStateOf(false) }
-    var editingTask by remember { mutableStateOf<Task?>(null) } // Add this state for editing task
+    var editingTask by remember { mutableStateOf<Task?>(null) }
     var showSaveMessage by remember { mutableStateOf(false) }
     var showReminderMessage by remember { mutableStateOf(false) }
     var reminderTaskTitle by remember { mutableStateOf("") }
-    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddTaskDialog = true },
                 containerColor = Color(0xFF228B22),
-
-                ) {
+            ) {
                 Text("+", color = Color.White, style = MaterialTheme.typography.bodyLarge)
             }
         },
@@ -276,7 +294,7 @@ fun TaskScreen(viewModel: TaskViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 16.dp)
-                        .padding(bottom = 72.dp), // Нижній відступ для кнопки "+", щоб уникнути перекриття
+                        .padding(bottom = 72.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     TaskList(viewModel.tasks, viewModel::toggleTaskCompletion, viewModel::removeTask, onEditTask = { task ->
@@ -294,7 +312,7 @@ fun TaskScreen(viewModel: TaskViewModel) {
                         },
                         onSave = { task ->
                             if (editingTask != null) {
-                                viewModel.updateTask(task) // Update the task
+                                viewModel.updateTask(task)
                             } else {
                                 viewModel.addTask(task)
                             }
@@ -303,47 +321,20 @@ fun TaskScreen(viewModel: TaskViewModel) {
                             editingTask = null
                             showSaveMessage = true
 
-                            // Schedule reminder based on the selected option
-                            val reminderDelay = when (task.reminder) {
-                                "За 10 хвилин" -> 10 * 60 * 1000L
-                                "За пів години" -> 30 * 60 * 1000L
-                                "За годину" -> 60 * 60 * 1000L
-                                "За день" -> 24 * 60 * 60 * 1000L
-                                "За тиждень" -> 7 * 24 * 60 * 60 * 1000L
-                                else -> 0L
-                            }
+                            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-                            val currentTime = System.currentTimeMillis()
-                            val taskStartTime = task.startDate.time
-                            val delayTime = taskStartTime - reminderDelay - currentTime
+                            // Schedule reminder for task start time
+                            scheduleReminder(alarmManager, context, task.startDate.time, task.title, "START")
 
-                            if (delayTime > 0) {
-                                coroutineScope.launch {
-                                    delay(delayTime)
-                                    reminderTaskTitle = task.title
-                                    showReminderMessage = true
-                                    delay(3000) // Show reminder message for 3 seconds
-                                    showReminderMessage = false
-                                }
-                            }
-
-                            // Show reminder when task starts
-                            if (taskStartTime > currentTime) {
-                                coroutineScope.launch {
-                                    delay(taskStartTime - currentTime)
-                                    reminderTaskTitle = task.title
-                                    showReminderMessage = true
-                                    delay(3000) // Show reminder message for 3 seconds
-                                    showReminderMessage = false
-                                }
-                            }
+                            // Schedule reminder for task end time
+                            scheduleReminder(alarmManager, context, task.endDate.time, task.title, "END")
                         }
                     )
                 }
 
                 if (showSaveMessage) {
                     LaunchedEffect(Unit) {
-                        delay(3000) // Затримка на 3 секунди
+                        delay(3000)
                         showSaveMessage = false
                     }
 
@@ -372,6 +363,11 @@ fun TaskScreen(viewModel: TaskViewModel) {
                 }
 
                 if (showReminderMessage) {
+                    LaunchedEffect(Unit) {
+                        delay(3000)
+                        showReminderMessage = false
+                    }
+
                     AnimatedVisibility(
                         visible = showReminderMessage,
                         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(animationSpec = tween(500)),
@@ -399,6 +395,46 @@ fun TaskScreen(viewModel: TaskViewModel) {
         }
     )
 }
+
+@RequiresApi(Build.VERSION_CODES.S)
+@SuppressLint("ScheduleExactAlarm")
+fun scheduleReminder(alarmManager: AlarmManager, context: Context, triggerAtMillis: Long, taskTitle: String, action: String) {
+    val intent = Intent(context, ReminderBroadcastReceiver::class.java).apply {
+        putExtra("TASK_TITLE", taskTitle)
+        putExtra("ACTION", action)
+    }
+    val pendingIntent = PendingIntent.getBroadcast(context, action.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE)
+    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+}
+
+class ReminderBroadcastReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val taskTitle = intent.getStringExtra("TASK_TITLE")
+        val action = intent.getStringExtra("ACTION")
+
+        val message = when (action) {
+            "START" -> "Час початку задачі \"$taskTitle\""
+            "END" -> "Завершення задачі \"$taskTitle\""
+            else -> "Нагадування по задачі \"$taskTitle\""
+        }
+
+        showCustomToast(context, message)
+    }
+}
+
+fun showCustomToast(context: Context, message: String) {
+    val inflater = LayoutInflater.from(context)
+    val layout = inflater.inflate(R.layout.custom_toast, null)
+    val textView: TextView = layout.findViewById(R.id.toastText)
+    textView.text = message
+
+    with(Toast(context)) {
+        duration = Toast.LENGTH_LONG
+        view = layout
+        show()
+    }
+}
+
 @Composable
 fun TaskList(
     tasks: List<Task>,
