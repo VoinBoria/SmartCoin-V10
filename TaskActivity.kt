@@ -329,10 +329,10 @@ fun TaskScreen(viewModel: TaskViewModel) {
                             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
                             // Schedule reminder for task start time
-                            scheduleReminder(alarmManager, context, task.startDate.time, task.title, "START", task.id.hashCode())
+                            scheduleReminder(alarmManager, context, task.startDate.time, task.title, "START", task.id.hashCode(), "на початку")
 
                             // Schedule reminder for task end time
-                            scheduleReminder(alarmManager, context, task.endDate.time, task.title, "END", task.id.hashCode() + 1)
+                            scheduleReminder(alarmManager, context, task.endDate.time, task.title, "END", task.id.hashCode() + 1, "у кінці")
                         }
                     )
                 }
@@ -403,10 +403,11 @@ fun TaskScreen(viewModel: TaskViewModel) {
 
 @RequiresApi(Build.VERSION_CODES.S)
 @SuppressLint("ScheduleExactAlarm")
-fun scheduleReminder(alarmManager: AlarmManager, context: Context, triggerAtMillis: Long, taskTitle: String, action: String, requestCode: Int) {
+fun scheduleReminder(alarmManager: AlarmManager, context: Context, triggerAtMillis: Long, taskTitle: String, action: String, requestCode: Int, reminderTime: String) {
     val intent = Intent(context, ReminderBroadcastReceiver::class.java).apply {
         putExtra("TASK_TITLE", taskTitle)
         putExtra("ACTION", action)
+        putExtra("REMINDER_TIME", reminderTime)
     }
     val pendingIntent = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
@@ -418,16 +419,17 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
         val action = intent.getStringExtra("ACTION")
 
         val message = when (action) {
-            "START" -> "Час початку задачі \"$taskTitle\""
-            "END" -> "Завершення задачі \"$taskTitle\""
-            else -> "Нагадування по задачі \"$taskTitle\""
+            "START" -> taskTitle ?: "Задача"
+            "END" -> "Не забудьте \"${taskTitle ?: "Задачу"}\""
+            "REMINDER" -> "Задача \"${taskTitle ?: "Задача"}\" почнеться через ${intent.getStringExtra("REMINDER_TIME")}"
+            else -> "Нагадування по задачі \"${taskTitle ?: "Задача"}\""
         }
 
         showNotification(context, message)
         vibratePhone(context)
     }
 
-    private fun showNotification(context: Context, message: String) {
+    private fun showNotification(context: Context, message: String?) {
         val channelId = "task_reminder_channel"
         val channelName = "Task Reminder"
         val importance = NotificationManager.IMPORTANCE_HIGH
@@ -444,7 +446,7 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Нагадування")
-            .setContentText(message)
+            .setContentText(message ?: "Нагадування")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
 
@@ -453,13 +455,10 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
                 notify(System.currentTimeMillis().toInt(), builder.build())
             }
         } else {
-            // Можна попросити користувача вручну увімкнути дозволи на повідомлення
-            // або показати відповідне повідомлення
             Toast.makeText(context, "Будь ласка, увімкніть дозволи на повідомлення", Toast.LENGTH_LONG).show()
         }
     }
 
-    @SuppressLint("ServiceCast")
     private fun vibratePhone(context: Context) {
         val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -470,7 +469,6 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
         }
     }
 }
-
 fun showCustomToast(context: Context, message: String) {
     val inflater = LayoutInflater.from(context)
     val layout = inflater.inflate(R.layout.custom_toast, null)
@@ -558,10 +556,11 @@ fun TaskItem(
         }
     }
 }
+@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(
-    taskToEdit: Task? = null, // Add this parameter to prefill fields when editing
+    taskToEdit: Task? = null,
     onDismiss: () -> Unit,
     onSave: (Task) -> Unit
 ) {
@@ -684,16 +683,16 @@ fun AddTaskDialog(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp), // Збільшено висоту для багато символів
+                        .height(200.dp),
                     singleLine = false,
-                    maxLines = 10 // Збільшено максимальну кількість рядків
+                    maxLines = 10
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { showStartDatePicker = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(8.dp)), // Стиль кнопки вибору дати
+                        .border(BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(8.dp)),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
                     Text(
@@ -707,7 +706,7 @@ fun AddTaskDialog(
                     onClick = { showEndDatePicker = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(8.dp)), // Стиль кнопки вибору дати
+                        .border(BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(8.dp)),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
                     Text(
@@ -721,7 +720,7 @@ fun AddTaskDialog(
                     onClick = { showReminderMenu = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(BorderStroke(1.dp, Color.Yellow), shape = RoundedCornerShape(8.dp)), // Стиль кнопки нагадування
+                        .border(BorderStroke(1.dp, Color.Yellow), shape = RoundedCornerShape(8.dp)),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
                     Text(
@@ -783,35 +782,48 @@ fun AddTaskDialog(
             Button(
                 onClick = {
                     if (title.isNotEmpty()) {
-                        onSave(
-                            Task(
-                                taskToEdit?.id ?: UUID.randomUUID().toString(),
-                                title,
-                                description.ifEmpty { null },
-                                startTime,
-                                endTime,
-                                reminder = reminder
-                            )
+                        val task = Task(
+                            taskToEdit?.id ?: UUID.randomUUID().toString(),
+                            title,
+                            description.ifEmpty { null },
+                            startTime,
+                            endTime,
+                            reminder = reminder
                         )
+                        onSave(task)
+                        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                        val reminderTime = when (reminder) {
+                            "За 10 хвилин" -> "10 хвилин"
+                            "За пів години" -> "пів години"
+                            "За годину" -> "годину"
+                            "За день" -> "день"
+                            "За тиждень" -> "тиждень"
+                            else -> ""
+                        }
+
+                        // Schedule reminder based on selected option
+                        when (reminder) {
+                            "За 10 хвилин" -> scheduleReminder(alarmManager, context, task.startDate.time - 10 * 60 * 1000, task.title, "REMINDER", task.id.hashCode(), reminderTime)
+                            "За пів години" -> scheduleReminder(alarmManager, context, task.startDate.time - 30 * 60 * 1000, task.title, "REMINDER", task.id.hashCode(), reminderTime)
+                            "За годину" -> scheduleReminder(alarmManager, context, task.startDate.time - 60 * 60 * 1000, task.title, "REMINDER", task.id.hashCode(), reminderTime)
+                            "За день" -> scheduleReminder(alarmManager, context, task.startDate.time - 24 * 60 * 60 * 1000, task.title, "REMINDER", task.id.hashCode(), reminderTime)
+                            "За тиждень" -> scheduleReminder(alarmManager, context, task.startDate.time - 7 * 24 * 60 * 60 * 1000, task.title, "REMINDER", task.id.hashCode(), reminderTime)
+                        }
                     } else {
                         // Show error message
                     }
                 },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent, // Прибираємо заливку
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
             ) {
-                Text("Зберегти", color = Color.Green) // Колір шрифту зелений
+                Text("Зберегти", color = Color.Green)
             }
         },
         dismissButton = {
             Button(
                 onClick = { onDismiss() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent, // Прибираємо заливку
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
             ) {
-                Text("Відмінити", color = Color.Red) // Колір шрифту червоний
+                Text("Відмінити", color = Color.Red)
             }
         },
         modifier = Modifier
