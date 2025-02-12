@@ -63,7 +63,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
 
-
 class TaskActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private val gson = Gson()
