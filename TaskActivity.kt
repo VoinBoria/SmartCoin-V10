@@ -476,11 +476,12 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val taskTitle = intent.getStringExtra("TASK_TITLE")
         val action = intent.getStringExtra("ACTION")
+        val reminderTime = intent.getStringExtra("REMINDER_TIME")
 
         val message = when (action) {
             "START" -> taskTitle ?: "Задача"
-            "REMINDER" -> "Задача \"${taskTitle ?: "Задача"}\" почнеться через ${intent.getStringExtra("REMINDER_TIME")}"
-            else -> "Нагадування по задачі \"${taskTitle ?: "Задача"}\""
+            "REMINDER" -> "Задача \"$taskTitle\" почнеться через $reminderTime"
+            else -> "Нагадування по задачі \"$taskTitle\""
         }
 
         if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
