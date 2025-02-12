@@ -68,6 +68,12 @@ import kotlinx.coroutines.launch
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat.startActivity
+import android.Manifest
+import android.app.AlertDialog
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class TaskActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
@@ -178,10 +184,63 @@ class TaskActivity : ComponentActivity() {
                 }
             }
         }
+
+        checkNotificationPermission()
+        checkExactAlarmPermission()
     }
 
-    val requestExactAlarmPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        // Handle the result if needed
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                showPermissionDialog(Manifest.permission.POST_NOTIFICATIONS, REQUEST_CODE_NOTIFICATION_PERMISSION)
+            }
+        }
+    }
+
+    private fun checkExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms()) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                startActivityForResult(intent, REQUEST_CODE_EXACT_ALARM_PERMISSION)
+            }
+        }
+    }
+
+    private fun showPermissionDialog(permission: String, requestCode: Int) {
+        AlertDialog.Builder(this)
+            .setTitle("Дозвіл на сповіщення")
+            .setMessage("Цей додаток потребує дозволу на сповіщення. Будь ласка, надайте дозвіл.")
+            .setPositiveButton("Дозволити") { _, _ ->
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(permission),
+                    requestCode
+                )
+            }
+            .setNegativeButton("Відмінити", null)
+            .show()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_NOTIFICATION_PERMISSION) {
+            if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+                // Permission granted, you can show notifications
+                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+                startActivity(intent)
+            } else {
+                // Permission denied, show a message to the user
+                Toast.makeText(this, "Будь ласка, увімкніть дозволи на повідомлення у налаштуваннях додатка", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    companion object {
+        private const val REQUEST_CODE_NOTIFICATION_PERMISSION = 1
+        private const val REQUEST_CODE_EXACT_ALARM_PERMISSION = 2
     }
 }
 
@@ -420,13 +479,16 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
 
         val message = when (action) {
             "START" -> taskTitle ?: "Задача"
-            "END" -> "Не забудьте \"${taskTitle ?: "Задачу"}\""
             "REMINDER" -> "Задача \"${taskTitle ?: "Задача"}\" почнеться через ${intent.getStringExtra("REMINDER_TIME")}"
             else -> "Нагадування по задачі \"${taskTitle ?: "Задача"}\""
         }
 
-        showNotification(context, message)
-        vibratePhone(context)
+        if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            showNotification(context, message)
+            vibratePhone(context)
+        } else {
+            requestNotificationPermission(context)
+        }
     }
 
     private fun showNotification(context: Context, message: String?) {
@@ -451,11 +513,15 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
 
         if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            with(NotificationManagerCompat.from(context)) {
-                notify(System.currentTimeMillis().toInt(), builder.build())
+            try {
+                with(NotificationManagerCompat.from(context)) {
+                    notify(System.currentTimeMillis().toInt(), builder.build())
+                }
+            } catch (e: SecurityException) {
+                requestNotificationPermission(context)
             }
         } else {
-            Toast.makeText(context, "Будь ласка, увімкніть дозволи на повідомлення", Toast.LENGTH_LONG).show()
+            requestNotificationPermission(context)
         }
     }
 
@@ -468,17 +534,17 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
             vibrator.vibrate(500)
         }
     }
-}
-fun showCustomToast(context: Context, message: String) {
-    val inflater = LayoutInflater.from(context)
-    val layout = inflater.inflate(R.layout.custom_toast, null)
-    val textView: TextView = layout.findViewById(R.id.toastText)
-    textView.text = message
 
-    with(Toast(context)) {
-        duration = Toast.LENGTH_LONG
-        view = layout
-        show()
+    private fun requestNotificationPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } else {
+            Toast.makeText(context, "Будь ласка, увімкніть дозволи на повідомлення у налаштуваннях додатка", Toast.LENGTH_LONG).show()
+        }
     }
 }
 
@@ -535,10 +601,7 @@ fun TaskItem(
                 text = "Початок: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(task.startDate)}",
                 style = MaterialTheme.typography.bodySmall.copy(color = Color.White)
             )
-            Text(
-                text = "Кінець: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(task.endDate)}",
-                style = MaterialTheme.typography.bodySmall.copy(color = Color.White)
-            )
+
             if (task.isCompleted) {
                 Text(
                     text = "Виконано",
@@ -702,19 +765,7 @@ fun AddTaskDialog(
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { showEndDatePicker = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(8.dp)),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
-                ) {
-                    Text(
-                        text = "Кінець: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(endTime)}",
-                        color = Color(0xFF4CAF50),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { showReminderMenu = true },
