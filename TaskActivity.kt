@@ -3,6 +3,8 @@ package com.serhio.homeaccountingapp
 import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.DatePickerDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.TimePickerDialog
 import android.content.BroadcastReceiver
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.serhio.homeaccountingapp.ui.theme.HomeAccountingAppTheme
@@ -62,6 +65,9 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
+import android.os.VibrationEffect
+import android.os.Vibrator
+import androidx.core.app.NotificationManagerCompat
 
 class TaskActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
@@ -417,7 +423,51 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
             else -> "Нагадування по задачі \"$taskTitle\""
         }
 
-        showCustomToast(context, message)
+        showNotification(context, message)
+        vibratePhone(context)
+    }
+
+    private fun showNotification(context: Context, message: String) {
+        val channelId = "task_reminder_channel"
+        val channelName = "Task Reminder"
+        val importance = NotificationManager.IMPORTANCE_HIGH
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, channelName, importance).apply {
+                description = "Канал для нагадувань про задачі"
+            }
+            val notificationManager: NotificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Нагадування")
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+
+        if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            with(NotificationManagerCompat.from(context)) {
+                notify(System.currentTimeMillis().toInt(), builder.build())
+            }
+        } else {
+            // Можна попросити користувача вручну увімкнути дозволи на повідомлення
+            // або показати відповідне повідомлення
+            Toast.makeText(context, "Будь ласка, увімкніть дозволи на повідомлення", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @SuppressLint("ServiceCast")
+    private fun vibratePhone(context: Context) {
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val effect = VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+            vibrator.vibrate(effect)
+        } else {
+            vibrator.vibrate(500)
+        }
     }
 }
 
