@@ -71,6 +71,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat.startActivity
 import android.Manifest
 import android.app.AlertDialog
+import android.app.Application
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -91,7 +92,7 @@ class TaskActivity : ComponentActivity() {
         sharedPreferences = getSharedPreferences("tasks_prefs", Context.MODE_PRIVATE)
 
         val viewModel: TaskViewModel by viewModels {
-            TaskViewModelFactory(sharedPreferences, gson)
+            TaskViewModelFactory(sharedPreferences, gson, this)
         }
 
         setContent {
@@ -256,7 +257,8 @@ data class Task(
 
 class TaskViewModel(
     private val sharedPreferences: SharedPreferences,
-    private val gson: Gson
+    private val gson: Gson,
+    private val context: Context
 ) : ViewModel() {
     private val _tasks = mutableStateListOf<Task>()
     val tasks: List<Task> = _tasks
@@ -274,7 +276,17 @@ class TaskViewModel(
         }
     }
 
+    private fun cancelTaskReminders(task: Task) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val startPendingIntent = PendingIntent.getBroadcast(context, task.id.hashCode(), Intent(context, ReminderBroadcastReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val endPendingIntent = PendingIntent.getBroadcast(context, task.id.hashCode() + 1, Intent(context, ReminderBroadcastReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
+        alarmManager.cancel(startPendingIntent)
+        alarmManager.cancel(endPendingIntent)
+    }
+
     fun removeTask(task: Task) {
+        // Скасування нагадувань
+        cancelTaskReminders(task)
         _tasks.remove(task)
         saveTasks()
     }
@@ -282,7 +294,14 @@ class TaskViewModel(
     fun toggleTaskCompletion(task: Task) {
         val index = _tasks.indexOf(task)
         if (index != -1) {
-            _tasks[index] = task.copy(isCompleted = !task.isCompleted)
+            val updatedTask = task.copy(isCompleted = !task.isCompleted)
+            _tasks[index] = updatedTask
+
+            // Скасування нагадувань, якщо задача відзначена як виконана
+            if (updatedTask.isCompleted) {
+                cancelTaskReminders(updatedTask)
+            }
+
             saveTasks()
         }
     }
@@ -313,12 +332,13 @@ class TaskViewModel(
 
 class TaskViewModelFactory(
     private val sharedPreferences: SharedPreferences,
-    private val gson: Gson
+    private val gson: Gson,
+    private val context: Context
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TaskViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return TaskViewModel(sharedPreferences, gson) as T
+            return TaskViewModel(sharedPreferences, gson, context) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -389,9 +409,6 @@ fun TaskScreen(viewModel: TaskViewModel) {
 
                             // Schedule reminder for task start time
                             scheduleReminder(alarmManager, context, task.startDate.time, task.title, "START", task.id.hashCode(), "на початку")
-
-                            // Schedule reminder for task end time
-                            scheduleReminder(alarmManager, context, task.endDate.time, task.title, "END", task.id.hashCode() + 1, "у кінці")
                         }
                     )
                 }
