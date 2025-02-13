@@ -868,7 +868,8 @@ fun AddTransactionDialog(
     }
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(today) }
-    var selectedCategory by remember { mutableStateOf(categories.firstOrNull() ?: "") }
+    var selectedCategory by remember { mutableStateOf("") }
+    var filteredCategories by remember { mutableStateOf(categories) }
     var comment by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     var isDropdownExpanded by remember { mutableStateOf(false) }
@@ -966,12 +967,15 @@ fun AddTransactionDialog(
             ) {
                 OutlinedTextField(
                     value = selectedCategory,
-                    onValueChange = {},
+                    onValueChange = { query ->
+                        selectedCategory = query
+                        filteredCategories = categories.filter { it.contains(query, true) }
+                        isDropdownExpanded = true
+                    },
                     label = { Text("Категорія") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(),
-                    readOnly = true,
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
                     },
@@ -991,7 +995,7 @@ fun AddTransactionDialog(
                     onDismissRequest = { isDropdownExpanded = false },
                     modifier = Modifier.background(Color.DarkGray)
                 ) {
-                    categories.forEach { category ->
+                    filteredCategories.forEach { category ->
                         DropdownMenuItem(
                             text = {
                                 Text(
@@ -1005,18 +1009,6 @@ fun AddTransactionDialog(
                             }
                         )
                     }
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = "Додати категорію",
-                                color = Color.White
-                            )
-                        },
-                        onClick = {
-                            showAddCategoryDialog = true
-                            isDropdownExpanded = false
-                        }
-                    )
                 }
             }
             OutlinedTextField(
@@ -1026,7 +1018,6 @@ fun AddTransactionDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
-                singleLine = false,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
                     focusedBorderColor = Color.White,
                     unfocusedBorderColor = Color.Gray,
@@ -1039,48 +1030,36 @@ fun AddTransactionDialog(
                 ),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
             )
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                TextButton(
+                Button(
                     onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
                 ) {
-                    Text("Скасувати", color = Color.Gray)
+                    Text("Скасувати", color = Color.White)
                 }
-                TextButton(
+                Button(
                     onClick = {
-                        if (amount.isNotBlank() && selectedCategory.isNotBlank()) {
-                            onSave(
-                                Transaction(
-                                    id = UUID.randomUUID().toString(),
-                                    amount = amount.toDouble(),
-                                    category = selectedCategory,
-                                    date = date,
-                                    comments = comment.takeIf { it.isNotBlank() } // Використання takeIf для comments
-                                )
+                        if (amount.isNotBlank() && selectedCategory.isNotBlank() && date.isNotBlank()) {
+                            val transaction = Transaction(
+                                id = UUID.randomUUID().toString(),
+                                amount = amount.toDouble(),
+                                date = date,
+                                category = selectedCategory,
+                                comments = comment.takeIf { it.isNotBlank() } // Використання takeIf для comments
                             )
-                            onDismiss()
+                            onSave(transaction)
                         }
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
                 ) {
                     Text("Зберегти", color = Color.White)
                 }
             }
         }
-    }
-
-    if (showAddCategoryDialog) {
-        AddCategoryDialog(
-            onDismiss = { showAddCategoryDialog = false },
-            onSave = { newCategory ->
-                onAddCategory(newCategory)
-                selectedCategory = newCategory
-                showAddCategoryDialog = false
-            }
-        )
     }
 }
 data class Transaction(
