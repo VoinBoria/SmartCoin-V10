@@ -854,7 +854,8 @@ fun IncomeAddIncomeTransactionDialog(
     }
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(today) }
-    var selectedCategory by remember { mutableStateOf(categories.firstOrNull() ?: "") }
+    var selectedCategory by remember { mutableStateOf("") }
+    var filteredCategories by remember { mutableStateOf(categories) }
     var comment by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     var isDropdownExpanded by remember { mutableStateOf(false) }
@@ -955,12 +956,15 @@ fun IncomeAddIncomeTransactionDialog(
             ) {
                 OutlinedTextField(
                     value = selectedCategory,
-                    onValueChange = {},
+                    onValueChange = { query ->
+                        selectedCategory = query
+                        filteredCategories = categories.filter { it.contains(query, true) }
+                        isDropdownExpanded = true
+                    },
                     label = { Text("Категорія") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(),
-                    readOnly = true,
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
                     },
@@ -980,7 +984,7 @@ fun IncomeAddIncomeTransactionDialog(
                     onDismissRequest = { isDropdownExpanded = false },
                     modifier = Modifier.background(Color.DarkGray)
                 ) {
-                    categories.forEach { category ->
+                    filteredCategories.forEach { category ->
                         DropdownMenuItem(
                             text = {
                                 Text(
@@ -994,18 +998,6 @@ fun IncomeAddIncomeTransactionDialog(
                             }
                         )
                     }
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = "Додати категорію",
-                                color = Color.White
-                            )
-                        },
-                        onClick = {
-                            isDropdownExpanded = false
-                            showAddCategoryDialog = true // Показуємо діалог додавання категорії
-                        }
-                    )
                 }
             }
             OutlinedTextField(
@@ -1015,7 +1007,6 @@ fun IncomeAddIncomeTransactionDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
-                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
                     focusedBorderColor = Color.White,
                     unfocusedBorderColor = Color.Gray,
@@ -1026,46 +1017,38 @@ fun IncomeAddIncomeTransactionDialog(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White
                 ),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold),
-                keyboardOptions = KeyboardOptions.Default.copy(
-                    keyboardType = KeyboardType.Text
-                )
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
             )
-            Button(
-                onClick = {
-                    val incomeTransaction = IncomeTransaction(
-                        id = UUID.randomUUID().toString(),
-                        amount = amount.toDoubleOrNull() ?: 0.0,
-                        date = date,
-                        category = selectedCategory,
-                        comments = comment.takeIf { it.isNotBlank() } // Використання takeIf для comments
-                    )
-                    onSave(incomeTransaction)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Green)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Text(
-                    text = "Зберегти",
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                )
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                ) {
+                    Text("Скасувати", color = Color.White)
+                }
+                Button(
+                    onClick = {
+                        if (amount.isNotBlank() && selectedCategory.isNotBlank() && date.isNotBlank()) {
+                            val transaction = IncomeTransaction(
+                                id = UUID.randomUUID().toString(),
+                                amount = amount.toDouble(),
+                                date = date,
+                                category = selectedCategory,
+                                comments = comment.takeIf { it.isNotBlank() } // Використання takeIf для comments
+                            )
+                            onSave(transaction)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) {
+                    Text("Зберегти", color = Color.White)
+                }
             }
         }
-    }
-
-    // Показ діалогу додавання категорії
-    if (showAddCategoryDialog) {
-        IncomeAddCategoryDialog(
-            onDismiss = { showAddCategoryDialog = false },
-            onSave = { newCategory ->
-                onAddCategory(newCategory)
-                selectedCategory = newCategory
-                showAddCategoryDialog = false
-            }
-        )
     }
 }
 data class IncomeTransaction(
