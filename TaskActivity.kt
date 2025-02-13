@@ -817,6 +817,13 @@ fun AddTaskDialog(
                 ) {
                     DropdownMenuItem(
                         onClick = {
+                            reminder = "Не нагадувати"
+                            showReminderMenu = false
+                        },
+                        text = { Text("Не нагадувати", color = Color.White) }
+                    )
+                    DropdownMenuItem(
+                        onClick = {
                             reminder = "За 10 хвилин"
                             showReminderMenu = false
                         },
